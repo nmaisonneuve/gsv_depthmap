@@ -1,88 +1,50 @@
 var redis = require("redis");
 var csv = require('csv');
 var fs = require('fs');
-var PNG = require('pngjs').PNG;
-var color = require('onecolor');
 var DepthDecoder = require('./depth_decoder.js');
 
 
+//set of images to use
+set_images = "paris"
+
+// connect to the database storing the Google Street view metadata
 client = redis.createClient();
- 
-client.on("error", function (err) {
-    console.log("Error " + err);
+client.on("error", function (err) { console.log("Error " + err); });
+
+// retrieve all the panoIDs of (Paris)
+client.smembers("area:"+set_images, function(err1, panoIDs){
+  // for only the first 20 ones
+  panoIDs.slice(1,20).forEach(function(panoID){
+    // give the meta data stored in the redis db 
+    client.get(panoID, function(err2, metadata){
+        // decode the depth from the metadata
+        decode_depthdata(json_meta_data);
+    });
+    // quit the redis client
+    client.quit();
+  });
 });
 
-// reading redis database
-client.scard("area:paris",function(err0, nb ){
-	
-	// nb of panorama saved
-	console.log(nb);
+function decode_depthdata(json_meta_data){
+  var data = JSON.parse(metadata);
+  var depth_map_data = data.model.depth_map;
+  DepthDecoder.decode(depth_map_data, function(depth_data){
+    // generating images 
+    write_img(depth_data, panoID);
 
-	client.smembers("area:paris", function(err1, panoIDs){
-
-		// for each panorama  (debugging: only the first ones, 1 to 5)
-		panoIDs.slice(1,20).forEach(function(panoID){
-
-			client.get(panoID, function(err2, metadata){
-
-			 	var data = JSON.parse(metadata);
-			 	var depth_map_data = data.model.depth_map;
-			 	DepthDecoder.decode(depth_map_data, function(raw){
-			 		write_img(raw, panoID);
-			 		//csv().from.array(data_csv).to.path(__dirname+"/"+panoID+"_depth.csv").end();
-			 	}); 
-			});
-		})
-	});
-});
-
-function write_pane(data, panoID){
-		var colors = new Array();
-	for (var i = 0; i < data.numDepths; i++){
-		 hue = (255.0 * i) / data.numDepths;
-		//hue = Math.floor(Math.random() * 255);
-		//console.log(hue);
-		colors.push(gen_color(hue));
-	}
-}
-
-function write_img(data,panoID){
-	var png = new PNG({
-    width: 512,
-    height: 256,
-    filterType: -1
-	});
-
-	for (var y = 0; y < data.height; y++) {
-    for (var x = 0; x < data.width; x++) {
-    	var idx = (data.width * y + x) << 2;
-    	var c = Math.min(data.depth[y * data.width + x] / 50.0 * 255, 255);
-    	png.data[idx  ] = c ;
-      png.data[idx+1] = c ;	
-      png.data[idx+2] = c ;
-    	png.data[idx+3] = 255;    
-    }
+    // OR
+    // generating a CSV
+    // csv().from.array(depth_data.depth).to.path(__dirname+"/"+panoID+"_depth.csv").end();
   }
-	png.pack().pipe(fs.createWriteStream(__dirname + "/"+ panoID+"_depth.png"));
-	console.log("finished.");
 }
 
-function gen_color(hue){
-	var _color = color("hsl("+hue+", 100%, 75%)")
-	return [_color.red() * 255, _color.green() * 255, _color.blue() * 255]
+function check_number(){
+  // Check the number of panorama for Paris in the redis database
+client.scard("area:"+set_images ,function(err0, nb ){
+  // nb of panorama saved
+  console.log(nb + " panoramic images stored for "+set_images);
+  });
+});
 }
 
-// array extension to debug 
-Array.prototype.getUnique = function(){
-   var u = {}, a = [];
-   for(var i = 0, l = this.length; i < l; ++i){
-      if(u.hasOwnProperty(this[i])) {
-         continue;
-      }
-      a.push(this[i]);
-      u[this[i]] = 1;
-   }
-   return a;
-}
-
-//client.quit();
+//
