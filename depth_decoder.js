@@ -61,6 +61,7 @@ module.exports =  {
     var planes = [];
     for ( var  i = 0 ; i < header.numberPlanes; i++){
         var infos = pack.Unpack('<ffff', raw.slice(pos,pos + 16));
+        // reading nornal vectors and distance coeff
         planes.push({n: [infos[0], infos[1],  infos[2]], d: infos[3]});
         pos += 16
     }
@@ -83,18 +84,24 @@ module.exports =  {
     
     depthMap = new Float32Array(w * h);
 
+
+
     // https://github.com/PaulWagener/Streetview-Explorer/blob/master/src/Panorama.cpp
     for(y = 0; y < h; ++y) {
       for(x = 0; x < w; ++x) {
+        // for each depth map pixel , we 
         planeIdx = indices[y* w + x];
         if (planeIdx > 0) {
+
+          // get the related plane and its normal vector
+          plane = planes[planeIdx];
+
+          // in order to calculate the depth at a pixel, one has to determine the intersection point of a ray starting at the center of the camera and the plane corresponding to the pixel.
           phi = (w - x - 1) / (w - 1) * 2 * Math.PI + Math.PI/2;
           theta = (h - y - 1) / (h - 1) * Math.PI;
-
           v[0] = Math.sin(theta) * Math.cos(phi);
           v[1] = Math.sin(theta) * Math.sin(phi);
           v[2] = Math.cos(theta);
-          plane = planes[planeIdx];
           t = plane.d / (v[0]*plane.n[0] + v[1]*plane.n[1] + v[2]*plane.n[2]);
           v[0] *= t;
           v[1] *= t;
@@ -109,7 +116,9 @@ module.exports =  {
     return {
         width: w,
         height: h,
-        depth: depthMap
+        depth: depthMap,
+        indices: indices,
+        planes: planes
     };
   }
 };
